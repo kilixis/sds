@@ -11,5 +11,3 @@
 - Satellites far away from the earth will not be able to deorbit fully, as the animation possible in CesiumJS is limited to 1 day, whereas these far-away satellites might take months to reach the earth's surface.
 
 - If you double click and follow the selected entity to the surface, the camera will be underground. You can use the "RESET VIEW" button on the top right corner to come back into default view.
-
-- Thanks for viewing the project!
