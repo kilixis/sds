@@ -25,15 +25,53 @@
         }
 
         #info {
-            color: white;
+            color: black;
             position: absolute;
-            top: 300px;
+            top: 200px;
             left: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            box-shadow: 0 0 10px white;
+            background-color: #e2e1df;
+            box-shadow: 0 0 5px black;
+            border-radius: 10px;
             padding: 10px;
-            border: 1px solid black;
             z-index: 1000;
+        }
+
+        #key {
+            color: black;
+            position: absolute;
+            width: 230px;
+            top: 340px;
+            left: 10px;
+            background-color: #e2e1df;
+            box-shadow: 0 0 5px black;
+            border-radius: 10px;
+            padding: 10px;
+            z-index: 1000;
+        }
+
+        .colorbox {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            margin-right: 10px; /* Space between color box and text */
+        }
+
+        .red {
+            background-color: red;
+        }
+
+        .blue {
+            background-color: blue;
+        }
+
+        .yellow {
+            background-color: yellow;
+        }
+
+        .marking-item {
+            display: flex; /* Flexbox for alignment */
+            align-items: center; /* Center align items vertically */
+            margin-bottom: 5px; /* Space between items */
         }
 
         #zoom-buttons {
@@ -45,6 +83,7 @@
             box-shadow: 0 0 10px #111;
             padding: 5px;
             border: 1px solid black;
+            transition: all 0.4s ease;
         }
 
         button {
@@ -53,12 +92,33 @@
             background-color: #111;
             border: none;
             box-shadow: 0 0 5px #222;
+            cursor: pointer;
+        }
+
+        #notifications {
+            color: white;
+            position: absolute;
+            top: 400px; /* Adjust position as needed */
+            right: 10px;
+            max-width: 300px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column; /* Stack notifications vertically */
+        }
+
+        #notifications .notification {
+            margin-bottom: 10px; /* Space between notifications */
+            padding: 10px;
+            border: 1px solid white;
+            border-radius: 5px;
+            transition: opacity 2s ease-out, transform 0.5s ease-out;
+            opacity: 1;
         }
         
         button i, #resetBtn {
             font-family: "Russo One", sans-serif;
-            letter-spacing: 4px;
-            font-size: 30px;
+            letter-spacing: 2px;
+            font-size: 17px;
             color: white;
         }
         
@@ -74,7 +134,6 @@
             height: auto;
             z-index: 100000;
         }
-
     </style>
 </head>
 
@@ -84,8 +143,24 @@
 
     <div id="cesiumContainer"></div>
     <div id="info">
-        <h3>Information</h3>
+        <h3>Selected Debris:</h3>
         <p id="object-info">Click on an object to see details.</p>
+    </div>
+
+    <div id="key">
+        <h3>Marking key</h3>
+        <div class="marking-item">
+            <div class="colorbox red"></div>
+            <span>High-risk entities</span>
+        </div>
+        <div class="marking-item">
+            <div class="colorbox blue"></div>
+            <span>Satellites</span>
+        </div>
+        <div class="marking-item">
+            <div class="colorbox yellow"></div>
+            <span>Space debris</span>
+        </div>
     </div>
     <div id="zoom-buttons">
         <button id="resetBtn">RESET VIEW</button>
@@ -93,289 +168,331 @@
         <button id="zoomOutBtn"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
     </div>
 
-    <script type="module">
-        Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkZTRhNWMzZC1iYTNiLTQzOTgtOWI5YS0xYTg3MThiNjcwMTMiLCJpZCI6MjQ0MTA1LCJpYXQiOjE3MjcyODMwNTJ9.-_H_Lof4en96XQPKq4jDO645JhfmIYXE4ctH3CksfT8";
-
-        const viewer = new Cesium.Viewer("cesiumContainer", {
-            homeButton: false,
-            sceneModePicker: false,
-            baseLayerPicker: false,
-            fullscreenButton: false,
-            vrButton: false,
-            infoBox: false,
-            selectionIndicator: true,
-            timeline: false,
-            animation: true,
-            navigationHelpButton: false,
-            geocoder: false,
-            creditContainer: document.createElement('div')
-        });
-
-        async function fetchTLEData(url) {
-            const response = await fetch(url);
-            const text = await response.text();
-            const tleLines = text.trim().split('\n');
-
-            const tleData = [];
-            for (let i = 0; i < tleLines.length; i += 3) {
-                if (tleLines[i + 1] && tleLines[i + 2]) {
-                    tleData.push({
-                        name: tleLines[i].trim(),
-                        tle: [
-                            tleLines[i + 1].trim(),
-                            tleLines[i + 2].trim()
-                        ]
-                    });
-                }
-            }
-            return tleData;
-        }
-
-        async function fetchAllTLEData() {
-            const debrisSources = [
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle',
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-1408-debris&FORMAT=tle',
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=fengyun-1c-debris&FORMAT=tle',
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-33-debris&FORMAT=tle'
-            ];
-
-            const satelliteSources = [
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle',
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle',
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=sarsat&FORMAT=tle',
-                'https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=tle'
-            ];
-
-            let debrisData = [];
-            let satelliteData = [];
-
-            for (const url of debrisSources) {
-                const data = await fetchTLEData(url);
-                debrisData = debrisData.concat(data);
-            }
-
-            for (const url of satelliteSources) {
-                const data = await fetchTLEData(url);
-                satelliteData = satelliteData.concat(data);
-            }
-
-            return { debrisData: debrisData.slice(0, 150), satelliteData: satelliteData.slice(0, 150) };
-        }
-
-        function addSatellitesAndDebris(tleData, color, type) {
-            tleData.forEach((object, index) => {
-                const satrec = satellite.twoline2satrec(object.tle[0], object.tle[1]);
-                const positionProperty = new Cesium.SampledPositionProperty();
-
-                for (let i = 0; i <= 3600; i += 60) {
-                    const time = Cesium.JulianDate.addSeconds(viewer.clock.startTime, i, new Cesium.JulianDate());
-                    const positionAndVelocity = satellite.propagate(satrec, Cesium.JulianDate.toDate(time));
-                    const positionEci = positionAndVelocity.position;
-
-                    if (positionEci) {
-                        const gmst = satellite.gstime(Cesium.JulianDate.toDate(time));
-                        const positionGd = satellite.eciToGeodetic(positionEci, gmst);
-                        const longitude = Cesium.Math.toDegrees(positionGd.longitude);
-                        const latitude = Cesium.Math.toDegrees(positionGd.latitude);
-                        const height = positionGd.height * 1000;
-
-                        positionProperty.addSample(time, Cesium.Cartesian3.fromDegrees(longitude, latitude, height));
-                    }
-                }
-
-                viewer.entities.add({
-                    id: `${type}_${object.name}_${index}`,
-                    name: object.name,
-                    position: positionProperty,
-                    point: {
-                        pixelSize: 5,
-                        color: color,
-                        outlineColor: Cesium.Color.WHITE,
-                        outlineWidth: 1
-                    },
-                    tle: object.tle
-                });
-            });
-        }
-
-        fetchAllTLEData().then(({ debrisData, satelliteData }) => {
-            addSatellitesAndDebris(debrisData, Cesium.Color.YELLOW, 'debris');
-            addSatellitesAndDebris(satelliteData, Cesium.Color.BLUE, 'satellite');
-
-            viewer.clock.startTime = Cesium.JulianDate.now();
-            viewer.clock.stopTime = Cesium.JulianDate.addHours(viewer.clock.startTime, 1, new Cesium.JulianDate());
-            viewer.clock.currentTime = viewer.clock.startTime;
-            viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
-            viewer.clock.multiplier = 44;
-            viewer.clock.shouldAnimate = true;
-
-            viewer.clock.onTick.addEventListener(detectCollisions);
-        });
-
-        const collisionSet = new Set();
-
-        function detectCollisions() {
-            const entities = viewer.entities.values;
-            const distanceThreshold = 15000;
-
-            for (let i = 0; i < entities.length; i++) {
-                const entityA = entities[i];
-                const positionA = entityA.position && entityA.position.getValue(viewer.clock.currentTime);
-
-                if (!positionA) continue;
-
-                for (let j = i + 1; j < entities.length; j++) {
-                    const entityB = entities[j];
-                    const positionB = entityB.position && entityB.position.getValue(viewer.clock.currentTime);
-
-                    if (!positionB) continue;
-
-                    const distance = Cesium.Cartesian3.distance(positionA, positionB);
-                    if (distance < distanceThreshold) {
-                        if (!collisionSet.has(entityA.id) && !collisionSet.has(entityB.id)) {
-                            entityA.point.color = Cesium.Color.LIGHTBLUE;
-                            entityB.point.color = Cesium.Color.RED;
-
-                            collisionSet.add(entityA.id);
-                            collisionSet.add(entityB.id);
-                        }
-                    }
-                }
-            }
-        }
-
-        function generateOrbit(entity) {
-            console.log("Generating orbit for:", entity.name); // Log the entity being processed
-
-            const positionProperty = entity.position;
-
-            if (positionProperty && positionProperty.getValue(viewer.clock.currentTime)) {
-                // Add path to visualize orbit
-                entity.path = new Cesium.PathGraphics({
-                    material: new Cesium.PolylineGlowMaterialProperty({
-                        glowPower: 0.2,
-                        color: Cesium.Color.WHITE
-                    }),
-                    width: 3,
-                    leadTime: 3600, // 1 hour into the future
-                    trailTime: 3600, // 1 hour into the past
-                    resolution: 120
-                });
-
-                // Apply glow effect to the selected object
-                entity.point.pixelSize = 10;
-                entity.point.color = Cesium.Color.WHITE;
-                entity.point.outlineColor = Cesium.Color.YELLOW;
-                entity.point.outlineWidth = 3;
-
-
-                // downward path(99/1 chance hai bhai)
-                const startTime = viewer.clock.currentTime;
-                const deorbitPosition = new Cesium.SampledPositionProperty();
-                const heightReductionRate = 35000; // speed
-
-                for (let i = 0; i <= 3600; i += 60) {
-                    const time = Cesium.JulianDate.addSeconds(startTime, i, new Cesium.JulianDate());
-                    const currentPos = positionProperty.getValue(time);
-
-                    if (currentPos) {
-                        const cartographic = Cesium.Cartographic.fromCartesian(currentPos);
-                        let height = cartographic.height - (i / 60) * heightReductionRate;
-
-                        if (height < 0) {
-                            height = 0; // make sure it reaches surface
-                        }
-
-                        deorbitPosition.addSample(time, Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, height));
-                    }
-                }
-
-                entity.position = deorbitPosition;
-
-                // remove entity once on ground
-                viewer.clock.onTick.addEventListener(() => {
-                    const currentPosition = entity.position.getValue(viewer.clock.currentTime);
-                    if (currentPosition) {
-                        const cartographic = Cesium.Cartographic.fromCartesian(currentPosition);
-                        if (cartographic.height <= 0) {
-                            viewer.entities.remove(entity);
-                            viewer.clock.onTick.removeEventListener(this); // Remove event listener
-                        }
-                    }
-                });
-            }
-        }
-
-
-
-        viewer.selectedEntityChanged.addEventListener(function (selectedEntity) {
-            if (selectedEntity) {
-                document.getElementById('object-info').innerText = selectedEntity.name;
-            } else {
-                document.getElementById("object-info").textContent = "Click on an object to see details.";
-            }
-        });
-
-        viewer.screenSpaceEventHandler.setInputAction(function onLeftClick(event) {
-            const pickedObject = viewer.scene.pick(event.position);
-            
-            
-
-            if (Cesium.defined(pickedObject) && pickedObject.id) {
-                viewer.selectedEntity = pickedObject.id;
-                generateOrbit(pickedObject.id);
-            }
-        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-        let zoomingIn = false;
-        let zoomingOut = false;
-
-        document.getElementById("zoomInBtn").addEventListener("mousedown", function () {
-            zoomingIn = true;
-            zoomInContinuously();
-        });
-
-        document.getElementById("zoomInBtn").addEventListener("mouseup", function () {
-            zoomingIn = false;
-        });
-
-        document.getElementById("zoomInBtn").addEventListener("mouseleave", function () {
-            zoomingIn = false;
-        });
-
-        document.getElementById("zoomOutBtn").addEventListener("mousedown", function () {
-            zoomingOut = true;
-            zoomOutContinuously();
-        });
-
-        document.getElementById("zoomOutBtn").addEventListener("mouseup", function () {
-            zoomingOut = false;
-        });
-
-        document.getElementById("zoomOutBtn").addEventListener("mouseleave", function () {
-            zoomingOut = false;
-        });
-
-        function zoomInContinuously() {
-            if (zoomingIn) {
-                viewer.camera.zoomIn(50000);
-                requestAnimationFrame(zoomInContinuously);
-            }
-        }
-
-        function zoomOutContinuously() {
-            if (zoomingOut) {
-                viewer.camera.zoomOut(50000);
-                requestAnimationFrame(zoomOutContinuously);
-            }
-        }
-
-        document.getElementById("resetBtn").addEventListener("click", function () {
-        viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(0, 0, 50000000) // reset cam pos
-        });
-    });
-    </script>
+    <div id="notifications"></div>
 </body>
 
-</html>
+
+<script type="module">
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkZTRhNWMzZC1iYTNiLTQzOTgtOWI5YS0xYTg3MThiNjcwMTMiLCJpZCI6MjQ0MTA1LCJpYXQiOjE3MjcyODMwNTJ9.-_H_Lof4en96XQPKq4jDO645JhfmIYXE4ctH3CksfT8";
+
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+        homeButton: false,
+        sceneModePicker: false,
+        baseLayerPicker: false,
+        fullscreenButton: false,
+        vrButton: false,
+        infoBox: false,
+        selectionIndicator: true,
+        timeline: false,
+        animation: true,
+        navigationHelpButton: false,
+        geocoder: false,
+        creditContainer: document.createElement('div')
+    });
+
+    // Show notification with stacking behavior
+    const notifiedEntities = new Set();
+
+function showNotification(message) {
+    const notificationsDiv = document.getElementById("notifications");
+
+    // Create new notification element
+    const notification = document.createElement("div");
+    notification.innerText = message;
+    notification.classList.add('notification'); // Add a class for further styling
+
+    // Append the new notification to the container
+    notificationsDiv.appendChild(notification);
+    notificationsDiv.style.display = "flex"; // Show notifications container
+
+    // Fade out and remove notification after 7 seconds
+    setTimeout(() => {
+        notification.style.opacity = "0"; // Fade out effect
+        setTimeout(() => {
+            notificationsDiv.removeChild(notification);
+            // If there are no notifications, hide the div
+            if (notificationsDiv.children.length === 0) {
+                notificationsDiv.style.display = "none"; // Hide if no notifications
+            }
+        }, 2000); // Wait for fade out to finish before removing
+    }, 7000); // Stay for 7 seconds
+}
+
+    function stackNotifications() {
+        const notificationsDiv = document.getElementById("notifications");
+        const notifications = notificationsDiv.querySelectorAll('.notification');
+
+        // Set stacking based on each notification's position (after rendering)
+        notifications.forEach((notification, index) => {
+            const notificationHeight = notification.offsetHeight + 10; // Adjust for padding or gaps
+            // Translate each notification based on its index (sequential stacking)
+            notification.style.transform = `translateY(${-index * notificationHeight}px)`;
+        });
+    }
+
+
+    async function fetchTLEData(url) {
+        const response = await fetch(url);
+        const text = await response.text();
+        const tleLines = text.trim().split('\n');
+
+        const tleData = [];
+        for (let i = 0; i < tleLines.length; i += 3) {
+            if (tleLines[i + 1] && tleLines[i + 2]) {
+                tleData.push({
+                    name: tleLines[i].trim(),
+                    tle: [
+                        tleLines[i + 1].trim(),
+                        tleLines[i + 2].trim()
+                    ]
+                });
+            }
+        }
+        return tleData;
+    }
+
+    async function fetchAllTLEData() {
+        const debrisSources = [
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle',
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-1408-debris&FORMAT=tle',
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=fengyun-1c-debris&FORMAT=tle',
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-33-debris&FORMAT=tle'
+        ];
+
+        const satelliteSources = [
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle',
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle',
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=sarsat&FORMAT=tle',
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=tle'
+        ];
+
+        // *** Adding an extra source for yellow debris ***
+        const yellowDebrisSources = [
+            'https://celestrak.org/NORAD/elements/gp.php?GROUP=cubesat&FORMAT=tle'
+        ];
+
+        let debrisData = [];
+        let satelliteData = [];
+        let yellowDebrisData = [];
+
+        for (const url of debrisSources) {
+            const data = await fetchTLEData(url);
+            debrisData = debrisData.concat(data);
+        }
+
+        for (const url of satelliteSources) {
+            const data = await fetchTLEData(url);
+            satelliteData = satelliteData.concat(data);
+        }
+
+        for (const url of yellowDebrisSources) {
+            const data = await fetchTLEData(url);
+            yellowDebrisData = yellowDebrisData.concat(data);
+        }
+
+        // altitude threshold, can be increased the display farther sats
+        const altitudeThreshold = 1000;
+
+        debrisData = debrisData.filter(satellite => getSatelliteAltitude(satellite.tle) < altitudeThreshold);
+        satelliteData = satelliteData.filter(satellite => getSatelliteAltitude(satellite.tle) < altitudeThreshold);
+        yellowDebrisData = yellowDebrisData.filter(satellite => getSatelliteAltitude(satellite.tle) < altitudeThreshold);
+
+        return { debrisData: debrisData.slice(0, 50), satelliteData: satelliteData.slice(0, 150), yellowDebrisData: yellowDebrisData.slice(0, 150) };
+    }
+
+    function getSatelliteAltitude(tle) {
+        const satrec = satellite.twoline2satrec(tle[0], tle[1]);
+        const currentTime = new Date();
+        const positionAndVelocity = satellite.propagate(satrec, currentTime);
+        const positionEci = positionAndVelocity.position;
+
+        if (positionEci) {
+            const gmst = satellite.gstime(currentTime);
+            const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+            const altitude = positionGd.height; // Altitude in kilometers
+            return altitude;
+        }
+        return Infinity;
+    }
+
+    function addSatellitesAndDebris(tleData, color, type) {
+        tleData.forEach((object, index) => {
+            const satrec = satellite.twoline2satrec(object.tle[0], object.tle[1]);
+            const positionProperty = new Cesium.SampledPositionProperty();
+
+            for (let i = 0; i <= 3600; i += 60) {
+                const time = Cesium.JulianDate.addSeconds(viewer.clock.startTime, i, new Cesium.JulianDate());
+                const positionAndVelocity = satellite.propagate(satrec, Cesium.JulianDate.toDate(time));
+                const positionEci = positionAndVelocity.position;
+
+                if (positionEci) {
+                    const gmst = satellite.gstime(Cesium.JulianDate.toDate(time));
+                    const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+                    const longitude = Cesium.Math.toDegrees(positionGd.longitude);
+                    const latitude = Cesium.Math.toDegrees(positionGd.latitude);
+                    const height = positionGd.height * 1000;
+
+                    positionProperty.addSample(time, Cesium.Cartesian3.fromDegrees(longitude, latitude, height));
+                }
+            }
+
+            viewer.entities.add({
+                id: `${type}_${object.name}_${index}`,
+                name: object.name,
+                position: positionProperty,
+                point: {
+                    pixelSize: 5,
+                    color: color, // Assigning colors here
+                    outlineColor: Cesium.Color.WHITE,
+                    outlineWidth: 1
+                },
+                tle: object.tle
+            });
+        });
+    }
+
+    function generateOrbit(entity) {
+        const positionProperty = entity.position;
+
+        if (positionProperty && positionProperty.getValue(viewer.clock.currentTime)) {
+            entity.path = new Cesium.PathGraphics({
+                material: new Cesium.PolylineGlowMaterialProperty({
+                    glowPower: 0.2,
+                    color: Cesium.Color.WHITE
+                }),
+                width: 3,
+                leadTime: 3600,
+                trailTime: 3600,
+                resolution: 120
+            });
+
+            entity.point.pixelSize = 10;
+            entity.point.color = Cesium.Color.WHITE;
+            entity.point.outlineColor = Cesium.Color.YELLOW;
+            entity.point.outlineWidth = 3;
+
+            const startTime = viewer.clock.currentTime;
+            const deorbitPosition = new Cesium.SampledPositionProperty();
+            const heightReductionRate = 35000; 
+
+            for (let i = 0; i <= 3600; i += 60) {
+                const time = Cesium.JulianDate.addSeconds(startTime, i, new Cesium.JulianDate());
+                const currentPos = positionProperty.getValue(time);
+
+                if (currentPos) {
+                    const cartographic = Cesium.Cartographic.fromCartesian(currentPos);
+                    let height = cartographic.height - (i / 60) * heightReductionRate;
+
+                    if (height < 0) {
+                        height = 0;
+                    }
+
+                    deorbitPosition.addSample(time, Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, height));
+                }
+            }
+
+            entity.position = deorbitPosition;
+
+            const onTickListener = function () {
+                const currentPosition = entity.position.getValue(viewer.clock.currentTime);
+                if (currentPosition) {
+                    const cartographic = Cesium.Cartographic.fromCartesian(currentPosition);
+                    if (cartographic.height <= 0) {
+                        // Only notify if this entity hasn't already been notified
+                        if (!notifiedEntities.has(entity.id)) {
+                            // Convert longitude and latitude to degrees with 2 decimal precision
+                            const latitude = Cesium.Math.toDegrees(cartographic.latitude).toFixed(2);
+                            const longitude = Cesium.Math.toDegrees(cartographic.longitude).toFixed(2);
+                            
+                            // Show the notification with properly formatted lat/lon
+                            showNotification(`${entity.name} has landed at coordinates (Lat: ${latitude}°, Lon: ${longitude}°)`);
+
+                            notifiedEntities.add(entity.id); // Mark this entity as notified
+                            viewer.camera.flyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(0, 0, 35000000)
+                            });
+                        }
+
+                        viewer.entities.remove(entity); // Remove entity after landing
+                        viewer.clock.onTick.removeEventListener(onTickListener); // Remove event listener
+                    }
+                }
+            };
+
+            viewer.clock.onTick.addEventListener(onTickListener);
+        }
+    }
+
+    viewer.selectedEntityChanged.addEventListener(function (selectedEntity) {
+        if (selectedEntity) {
+            document.getElementById('object-info').innerText = selectedEntity.name;
+        } else {
+            document.getElementById("object-info").textContent = "Click on an object to see details.";
+        }
+    });
+
+    viewer.screenSpaceEventHandler.setInputAction(function onLeftClick(event) {
+        const pickedObject = viewer.scene.pick(event.position);
+        if (Cesium.defined(pickedObject) && pickedObject.id) {
+            viewer.selectedEntity = pickedObject.id;
+            generateOrbit(pickedObject.id);
+        }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    fetchAllTLEData().then(({ debrisData, satelliteData, yellowDebrisData }) => {
+        // Red debris (dangerous)
+        addSatellitesAndDebris(debrisData, Cesium.Color.RED, 'debris');
+        // Blue satellites
+        addSatellitesAndDebris(satelliteData, Cesium.Color.BLUE, 'satellite');
+        // Yellow debris (extra debris)
+        addSatellitesAndDebris(yellowDebrisData, Cesium.Color.YELLOW, 'yellow-debris');
+
+        viewer.clock.startTime = Cesium.JulianDate.now();
+        viewer.clock.stopTime = Cesium.JulianDate.addHours(viewer.clock.startTime, 1, new Cesium.JulianDate());
+        viewer.clock.currentTime = viewer.clock.startTime;
+        viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+        viewer.clock.multiplier = 44;
+        viewer.clock.shouldAnimate = true;
+    });
+
+    let zoomingIn = false;
+    let zoomingOut = false;
+
+    document.getElementById("zoomInBtn").addEventListener("mousedown", function () {
+        zoomingIn = true;
+        zoomInContinuously();
+    });
+
+    document.getElementById("zoomInBtn").addEventListener("mouseup", function () {
+        zoomingIn = false;
+    });
+
+    document.getElementById("zoomOutBtn").addEventListener("mousedown", function () {
+        zoomingOut = true;
+        zoomOutContinuously();
+    });
+
+    document.getElementById("zoomOutBtn").addEventListener("mouseup", function () {
+        zoomingOut = false;
+    });
+
+    function zoomInContinuously() {
+        if (zoomingIn) {
+            viewer.camera.zoomIn(50000);
+            requestAnimationFrame(zoomInContinuously);
+        }
+    }
+
+    function zoomOutContinuously() {
+        if (zoomingOut) {
+            viewer.camera.zoomOut(50000);
+            requestAnimationFrame(zoomOutContinuously);
+        }
+    }
+
+    document.getElementById("resetBtn").addEventListener("click", function () {
+        viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(0, 0, 35000000)
+        });
+    });
+</script>
